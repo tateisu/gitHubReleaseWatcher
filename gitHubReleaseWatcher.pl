@@ -57,20 +57,25 @@ sub safeName($){
     $a;
 }
 
+sub loadYaml($){
+    my($file) = @_;
+    load 'YAML::Syck';
+    {
+        no warnings;
+        $YAML::Syck::ImplicitUnicode = 1;
+    }
+    return YAML::Syck::LoadFile($configFile);
+}
+
 my $lemmyPoster = undef;
 sub postToLemmy{
     my($repoName,$name,$url)=@_;
     if( not $lemmyPoster){
-        load 'YAML::Syck';
-        load 'LemmyPoster';
-        {
-            no warnings;
-            $YAML::Syck::ImplicitUnicode = 1;
-        }
         my $configFile = "lemmyPoster.yml";
-        my $config = YAML::Syck::LoadFile( $configFile);
+        my $config = loadYaml($configFile);
         die "missing 'community' in $configFile" unless $config->{community};
 
+        load 'LemmyPoster';
         $lemmyPoster = LemmyPoster->new( %$config, ua => $ua ,verbose=>$verbose);
     }
     $lemmyPoster->post(
@@ -83,15 +88,10 @@ my $mastodonPoster = undef;
 sub postToMastodon{
     my($repoName,$name,$url)=@_;
     if( not $mastodonPoster){
-        load 'YAML::Syck';
-        load 'MastodonPoster';
-        {
-            no warnings;
-            $YAML::Syck::ImplicitUnicode = 1;
-        }
         my $configFile = "mastodonPoster.yml";
-        my $config = YAML::Syck::LoadFile( $configFile);
+        my $config = loadYaml($configFile);
 
+        load 'MastodonPoster';
         $mastodonPoster = MastodonPoster->new( %$config, ua => $ua ,verbose=>$verbose);
     }
     $mastodonPoster->post(

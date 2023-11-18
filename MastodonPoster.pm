@@ -88,6 +88,7 @@ sub post{
             $params->{visibility} = $postVisibilityDefault;
         }
     }
+
     return $self->jsonCall("POST","/api/v1/statuses",$params);
 }
 
