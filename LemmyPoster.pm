@@ -9,6 +9,9 @@ use URI::Escape;
 use Scalar::Util qw(looks_like_number);
 use JSON::XS;
 use LWP::UserAgent;
+use Encode;
+
+my $utf8 = Encode::find_encoding("UTF-8");
 
 sub new{
 	my $class = shift;
@@ -38,26 +41,36 @@ sub lemmyApi{
 	my $url = "https://$host/api/v3$endpoint";
 
 	my $res;
+	my $urlCensored =$url;
 	if ("GET" eq $method) {
 		$params and $url = "$url?".encodeQuery($params);
-		say "$method $url";
+		$urlCensored =~ s/\b(auth)=[^&]*/$1=**/g;
+        $self->{verbose} and say "$method $urlCensored";
 		$res = $ua->get($url);
 	}elsif( "POST" eq $method ){
+		$urlCensored =~ s/\b(auth)=[^&]*/$1=**/g;
 		my $body = encode_json( $params // {} );
-		say "$method $url body=$body";
+		my $bodeCensored = $body;
+		$bodeCensored =~ s/"(auth|password)":"[^"]*"/"$1":"**"/g;
+        $self->{verbose} and say "$method $urlCensored body=$bodeCensored";
 		$res = $ua->post( $url, "Content-Type" => "application/json", Content => $body );
 	}else{
 		die "lemmyApi: unknown method $method";
 	}
-	$res->is_success or die "$method $url\n",$res->status_line;
-	$self->{lastContent} = $res->decoded_content;
-	return decode_json $res->content;
+	if($res->is_success){
+        $self->{lastContent} = $res->decoded_content;
+        return decode_json $res->content;
+    }
+    my $body = $utf8->decode( $res->content );
+    die "ERROR: $method $urlCensored\n", $res->status_line,"\nbody=\[$body]";
 }
 
 # ログインする
 sub login{
 	my($self)=@_;
 	croak "missing pair of 'user','password' parameters." unless ($self->{user} && $self->{password});
+
+    $self->{verbose} and say "login as $self->{user}…";
 
 	my $root = $self->lemmyApi(
 		"POST",
@@ -129,7 +142,7 @@ sub post($$$$){
 		"POST",
 		"/post",
 		{
-			"community_id" => $communityId,
+			"community_id" => 0+$communityId,
 			"url" => $url,
 			"name" => $title,
 			"nsfw"=> \0, # false for JSON::XS

@@ -17,6 +17,7 @@ chdir($RealBin) or die "chdir failed. $! $RealBin";
 my $ua = LWP::UserAgent->new( timeout => 30);
 
 my $lemmyPoster;
+
 if( not $lemmyPoster){
 	load 'YAML::Syck';
 	load 'LemmyPoster';
@@ -25,7 +26,11 @@ if( not $lemmyPoster){
 		$YAML::Syck::ImplicitUnicode = 1;
 	}
 	my $lemmyConfig = YAML::Syck::LoadFile( "lemmyPoster.yml");
-	$lemmyPoster = LemmyPoster->new( %$lemmyConfig, ua => $ua);
+	$lemmyPoster = LemmyPoster->new( 
+	    %$lemmyConfig
+	    ,ua => $ua
+	    ,verbose =>1
+    );
 }
 
 my @lt = localtime;
