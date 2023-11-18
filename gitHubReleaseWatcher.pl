@@ -58,13 +58,12 @@ sub safeName($){
 }
 
 sub loadYaml($){
-    my($file) = @_;
     load 'YAML::Syck';
     {
         no warnings;
         $YAML::Syck::ImplicitUnicode = 1;
     }
-    return YAML::Syck::LoadFile($configFile);
+    return YAML::Syck::LoadFile(@_);
 }
 
 my $lemmyPoster = undef;
