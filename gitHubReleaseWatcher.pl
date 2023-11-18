@@ -17,7 +17,12 @@ use lib "$RealBin";
 binmode $_,":utf8" for \*STDOUT,\*STDERR;
 
 my $verbose = 0;
-GetOptions("verbose:+"=>\$verbose) or die "bad options.";
+my $postTo = "mastodon";
+
+GetOptions(
+    "verbose:+"=>\$verbose,
+    "postTo=s"=>\$postTo,
+) or die "bad options.";
 
 my @repoNames = qw(
     matrix-org/synapse
@@ -33,7 +38,7 @@ chdir($RealBin) or die "chdir failed. $! $RealBin";
 
 my $iso8601 = DateTime::Format::ISO8601->new;
 my $ua = LWP::UserAgent->new( timeout => 30);
-my $lemmyPoster =undef;
+
 
 # return true if not $b or $a > $b
 sub newer($$){
@@ -47,59 +52,89 @@ sub newer($$){
 }
 
 sub safeName($){
-	my($a)=@_;
-	$a =~ s/[\\\/:*?"<>|_]+/_/g;
-	$a;
+    my($a)=@_;
+    $a =~ s/[\\\/:*?"<>|_]+/_/g;
+    $a;
 }
+
+my $lemmyPoster = undef;
+sub postToLemmy{
+    my($repoName,$name,$url)=@_;
+    if( not $lemmyPoster){
+        load 'YAML::Syck';
+        load 'LemmyPoster';
+        {
+            no warnings;
+            $YAML::Syck::ImplicitUnicode = 1;
+        }
+        my $configFile = "lemmyPoster.yml";
+        my $config = YAML::Syck::LoadFile( $configFile);
+        die "missing 'community' in $configFile" unless $config->{community};
+
+        $lemmyPoster = LemmyPoster->new( %$config, ua => $ua ,verbose=>$verbose);
+    }
+    $lemmyPoster->post(
+        $lemmyPoster->{community},
+        $url,
+        "$repoName $name"
+    );
+}
+my $mastodonPoster = undef;
+sub postToMastodon{
+    my($repoName,$name,$url)=@_;
+    if( not $mastodonPoster){
+        load 'YAML::Syck';
+        load 'MastodonPoster';
+        {
+            no warnings;
+            $YAML::Syck::ImplicitUnicode = 1;
+        }
+        my $configFile = "mastodonPoster.yml";
+        my $config = YAML::Syck::LoadFile( $configFile);
+
+        $mastodonPoster = MastodonPoster->new( %$config, ua => $ua ,verbose=>$verbose);
+    }
+    $mastodonPoster->post(
+       status => "$repoName $name $url",
+    );
+}
+
 mkdir "check";
 
 for my $repoName (@repoNames){
-	# https://developer.github.com/v3/repos/releases/
-	my $url = "https://api.github.com/repos/$repoName/releases";
-	my $res = $ua->get($url,'Accept' => 'application/vnd.github.v3+json');
-	$res->is_success or die "$url\n",$res->status_line;
-	
-	my $list = decode_json $res->content;
+    # https://developer.github.com/v3/repos/releases/
+    my $url = "https://api.github.com/repos/$repoName/releases";
+    my $res = $ua->get($url,'Accept' => 'application/vnd.github.v3+json');
+    $res->is_success or die "$url\n",$res->status_line;
+    
+    my $list = decode_json $res->content;
 
-	my $latest;
-	for my $item (@$list){
-		next if $item->{prerelease};
-		$latest = $item if newer $item,$latest;
-	}
-	if( not $latest){
-		warn "missing latest: $repoName\n";
-		print dump($latest);
-		next;
-	}
+    my $latest;
+    for my $item (@$list){
+        next if $item->{prerelease};
+        $latest = $item if newer $item,$latest;
+    }
+    if( not $latest){
+        warn "missing latest: $repoName\n";
+        print dump($latest);
+        next;
+    }
 
-	my $name = $latest->{name};
-	$name =~ s/\A\s+//;
-	$name =~ s/\s+\z//;
-	$verbose and say "$repoName $name";
+    my $name = $latest->{name};
+    $name =~ s/\A\s+//;
+    $name =~ s/\s+\z//;
+    $verbose and say "$repoName $name";
 
-	$url = $latest->{ html_url };
-	my $checkFile = "check/".safeName($url);
-	next if -e $checkFile;
-	
-	if( not $lemmyPoster){
-		load 'YAML::Syck';
-		load 'LemmyPoster';
-		{
-			no warnings;
-			$YAML::Syck::ImplicitUnicode = 1;
-		}
-		my $lemmyConfig = YAML::Syck::LoadFile( "lemmyPoster.yml");
-		die "missing 'community' in lemmyPoster.yml" unless $lemmyConfig->{community};
+    $url = $latest->{ html_url };
+    my $checkFile = "check/".safeName($url);
+    next if -e $checkFile;
+    
+    if(lc($postTo) eq "lemmy" ){
+        postToLemmy($repoName,$name,$url);
+    }else{
+        postToMastodon($repoName,$name,$url);
+    }
 
-		$lemmyPoster = LemmyPoster->new( %$lemmyConfig, ua => $ua ,verbose=>$verbose);
-	}
-
-	$lemmyPoster->post(
-		$lemmyPoster->{community},
-		$url,
-		"$repoName $name"
-	);
-
-	open(my $fh,">:raw",$checkFile) or die "$! $checkFile";
-	close($fh) or die "$! $checkFile";
+    open(my $fh,">:raw",$checkFile) or die "$! $checkFile";
+    close($fh) or die "$! $checkFile";
 }
