@@ -1,0 +1,12 @@
+# URL prefix for API access.
+apiUrlPrefix: https://mastodon.com
+
+# user's access token for API access.
+# see "Authorization" in https://docs.joinmastodon.org/methods/statuses/#headers
+# you can create new token from https://{your-server}/settings/applications/new
+userAccessToken: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# default post visibility. (can be overridden by code)
+# see "visibility" in https://docs.joinmastodon.org/methods/statuses/#form-data-parameters
+# value: one of public, unlisted, private, direct. if commented out, it means public.
+postVisibilityDefault: unlisted
